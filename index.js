@@ -31,12 +31,14 @@ const sendCommandToOpenVPN = (command) => {
 // API Endpoint to get OpenVPN status
 app.get('/api/openvpn/status', async (req, res) => {
     try {
-        const data = await sendCommandToOpenVPN('status 3');
-        res.json({ status: data });
+        const rawData = await sendCommandToOpenVPN('status 3');
+        const parsedData = parseOpenVPNStatus(rawData);
+        res.json(parsedData);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
+
 
 // API Endpoint to get connected clients
 app.get('/api/openvpn/clients', async (req, res) => {
@@ -57,6 +59,55 @@ app.get('/api/openvpn/clients', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+const parseOpenVPNStatus = (data) => {
+    const lines = data.split('\n');
+    const result = {
+        time: null,
+        clients: [],
+        routing_table: [],
+        global_stats: {}
+    };
+
+    for (const line of lines) {
+        const parts = line.split('\t');
+
+        if (line.startsWith("TIME")) {
+            result.time = parts[1];  // Extract timestamp
+        } 
+        else if (line.startsWith("CLIENT_LIST")) {
+            result.clients.push({
+                common_name: parts[1],
+                real_address: parts[2],
+                virtual_address: parts[3] || null,
+                virtual_ipv6_address: parts[4] || null,
+                bytes_received: parseInt(parts[5], 10),
+                bytes_sent: parseInt(parts[6], 10),
+                connected_since: parts[7],
+                connected_since_time_t: parseInt(parts[8], 10),
+                username: parts[9],
+                client_id: parseInt(parts[10], 10),
+                peer_id: parseInt(parts[11], 10),
+                data_channel_cipher: parts[12]
+            });
+        } 
+        else if (line.startsWith("ROUTING_TABLE")) {
+            result.routing_table.push({
+                virtual_address: parts[1],
+                common_name: parts[2],
+                real_address: parts[3],
+                last_ref: parts[4],
+                last_ref_time_t: parseInt(parts[5], 10)
+            });
+        } 
+        else if (line.startsWith("GLOBAL_STATS")) {
+            result.global_stats[parts[1]] = parseInt(parts[2], 10);
+        }
+    }
+
+    return result;
+};
+
 
 // Start Express server
 app.listen(PORT, () => {
