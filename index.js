@@ -1,92 +1,70 @@
 const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
-const fs = require("fs");
-const Tail = require("tail").Tail;
+const net = require("net");
 const cors = require("cors");
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
-  cors: {
-    origin: "*",
-  },
+  cors: { origin: "*" },
 });
 
-// Path to OpenVPN status log (default path)
-const STATUS_LOG = "/etc/openvpn/status.log";
+const OPENVPN_HOST = "localhost";
+const OPENVPN_PORT = 5555;
 
-// Enable CORS
 app.use(cors());
 app.use(express.json());
 
-// Store active connections
-let connections = [];
+// Function to send a command to OpenVPN via Telnet
+const sendTelnetCommand = (command, callback) => {
+  const client = new net.Socket();
+  let responseData = "";
 
-// Function to parse OpenVPN status log
-const parseStatusLog = () => {
-  if (!fs.existsSync(STATUS_LOG)) return [];
+  client.connect(OPENVPN_PORT, OPENVPN_HOST, () => {
+    client.write(command + "\n");
+  });
 
-  const data = fs.readFileSync(STATUS_LOG, "utf8");
-  const lines = data.split("\n");
-  let parsedConnections = [];
+  client.on("data", (data) => {
+    responseData += data.toString();
+  });
 
-  let parsing = false;
-  for (const line of lines) {
-    if (line.startsWith("Common Name")) {
-      parsing = true; // Start reading connections
-      continue;
-    }
-    if (parsing && line.trim() === "") break;
+  client.on("end", () => {
+    callback(responseData);
+  });
 
-    if (parsing) {
-      const parts = line.split(",");
-      if (parts.length >= 4) {
-        parsedConnections.push({
-          commonName: parts[0],
-          realIP: parts[1],
-          bytesReceived: parseInt(parts[2]),
-          bytesSent: parseInt(parts[3]),
-          connectedSince: parts[4],
-        });
-      }
-    }
-  }
-
-  return parsedConnections;
+  client.on("error", (err) => {
+    callback(`Error: ${err.message}`);
+  });
 };
 
-// API Route to get active connections
-app.get("/api/connections", (req, res) => {
-  connections = parseStatusLog();
-  res.json(connections);
+// API Route to Fetch Logs from OpenVPN
+app.get("/api/logs", (req, res) => {
+  sendTelnetCommand("log all", (logs) => {
+    res.json({ logs });
+  });
 });
 
-// WebSocket connection
+// WebSocket for Real-Time Log Streaming
 io.on("connection", (socket) => {
-  console.log("New client connected");
+  console.log("New WebSocket connection");
 
-  socket.emit("connections:update", connections);
+  const fetchLogs = () => {
+    sendTelnetCommand("log all", (logs) => {
+      socket.emit("logs:update", logs);
+    });
+  };
+
+  fetchLogs();
+  const logInterval = setInterval(fetchLogs, 5000); // Update logs every 5 seconds
 
   socket.on("disconnect", () => {
     console.log("Client disconnected");
+    clearInterval(logInterval);
   });
 });
 
-// Watch OpenVPN status log for changes
-if (fs.existsSync(STATUS_LOG)) {
-  const tail = new Tail(STATUS_LOG);
-  tail.on("line", () => {
-    connections = parseStatusLog();
-    io.emit("connections:update", connections);
-  });
-
-  tail.on("error", (error) => {
-    console.error("Error watching file:", error);
-  });
-}
-
-// Start server
+// Start Server
 const PORT = 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
