@@ -1,74 +1,64 @@
-const express = require("express");
-const http = require("http");
-const socketIo = require("socket.io");
-const net = require("net");
-const cors = require("cors");
+const express = require('express');
+const net = require('net');
 
 const app = express();
-const server = http.createServer(app);
-const io = socketIo(server, {
-  cors: { origin: "*" },
-});
+const PORT = 3000;
+const OPENVPN_HOST = '127.0.0.1';
+const OPENVPN_PORT = 5555;  // Your OpenVPN management port
 
-const OPENVPN_HOST = "localhost";
-const OPENVPN_PORT = 5555;
+// Function to send command to OpenVPN management interface
+const sendCommandToOpenVPN = (command) => {
+    return new Promise((resolve, reject) => {
+        const client = new net.Socket();
+        let response = '';
 
-app.use(cors());
-app.use(express.json());
+        client.connect(OPENVPN_PORT, OPENVPN_HOST, () => {
+            client.write(command + '\n');
+        });
 
-const sendTelnetCommand = (command, callback) => {
-  const client = new net.Socket();
-  let responseData = "";
+        client.on('data', (data) => {
+            response += data.toString();
+            if (response.includes('END')) { // End of OpenVPN response
+                client.destroy();
+                resolve(response);
+            }
+        });
 
-  client.connect(OPENVPN_PORT, OPENVPN_HOST, () => {
-    client.write(command + "\n");
-    console.log(command);
-  });
-
-  client.on("data", (data) => {
-    console.log(responseData);
-    responseData += data.toString();
-  });
-
-  client.on("end", () => {
-    console.log(responseData);
-    callback(responseData);
-  });
-
-  client.on("error", (err) => {
-    callback(`Error: ${err.message}`);
-  });
+        client.on('error', (err) => reject(err));
+    });
 };
 
-// API Route to Fetch Logs from OpenVPN
-app.get("/api/logs", (req, res) => {
-  console.log("Req......");
-  sendTelnetCommand("log all", (logs) => {
-    res.json({ logs });
-  });
+// API Endpoint to get OpenVPN status
+app.get('/api/openvpn/status', async (req, res) => {
+    try {
+        const data = await sendCommandToOpenVPN('status 3');
+        res.json({ status: data });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
-// WebSocket for Real-Time Log Streaming
-io.on("connection", (socket) => {
-  console.log("New WebSocket connection");
-
-  const fetchLogs = () => {
-    sendTelnetCommand("log all", (logs) => {
-      socket.emit("logs:update", logs);
-    });
-  };
-
-  fetchLogs();
-  const logInterval = setInterval(fetchLogs, 5000);
-
-  socket.on("disconnect", () => {
-    console.log("Client disconnected");
-    clearInterval(logInterval);
-  });
+// API Endpoint to get connected clients
+app.get('/api/openvpn/clients', async (req, res) => {
+    try {
+        const data = await sendCommandToOpenVPN('status 3');
+        const clients = data.split('\n').filter(line => line.startsWith('CLIENT_LIST')).map(line => {
+            const parts = line.split(',');
+            return {
+                common_name: parts[1],
+                real_address: parts[2],
+                bytes_received: parts[3],
+                bytes_sent: parts[4],
+                connected_since: parts[6]
+            };
+        });
+        res.json(clients);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
-// Start Server
-const PORT = 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Start Express server
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
 });
