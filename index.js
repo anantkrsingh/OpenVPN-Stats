@@ -16,20 +16,22 @@ const OPENVPN_PORT = 5555;
 app.use(cors());
 app.use(express.json());
 
-// Function to send a command to OpenVPN via Telnet
 const sendTelnetCommand = (command, callback) => {
   const client = new net.Socket();
   let responseData = "";
 
   client.connect(OPENVPN_PORT, OPENVPN_HOST, () => {
     client.write(command + "\n");
+    console.log(command);
   });
 
   client.on("data", (data) => {
+    console.log(responseData);
     responseData += data.toString();
   });
 
   client.on("end", () => {
+    console.log(responseData);
     callback(responseData);
   });
 
@@ -40,6 +42,7 @@ const sendTelnetCommand = (command, callback) => {
 
 // API Route to Fetch Logs from OpenVPN
 app.get("/api/logs", (req, res) => {
+  console.log("Req......");
   sendTelnetCommand("log all", (logs) => {
     res.json({ logs });
   });
@@ -56,7 +59,7 @@ io.on("connection", (socket) => {
   };
 
   fetchLogs();
-  const logInterval = setInterval(fetchLogs, 5000); // Update logs every 5 seconds
+  const logInterval = setInterval(fetchLogs, 5000);
 
   socket.on("disconnect", () => {
     console.log("Client disconnected");
