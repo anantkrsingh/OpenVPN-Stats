@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenVPN Clients</title>
+</head>
+<body>
+    <h1>Connected Clients</h1>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Common Name</th>
+                <th>Real Address</th>
+                <th>Bytes Received</th>
+                <th>Bytes Sent</th>
+                <th>Connected Since</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% clients.forEach(client => { %>
+                <tr>
+                    <td><%= client.common_name %></td>
+                    <td><%= client.real_address %></td>
+                    <td><%= client.bytes_received %></td>
+                    <td><%= client.bytes_sent %></td>
+                    <td><%= client.connected_since %></td>
+                </tr>
+            <% }); %>
+        </tbody>
+    </table>
+</body>
+</html>

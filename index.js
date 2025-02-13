@@ -1,12 +1,16 @@
 const express = require('express');
 const net = require('net');
+const path = require('path');
 
 const app = express();
 const PORT = 3000;
 const OPENVPN_HOST = '127.0.0.1';
-const OPENVPN_PORT = 5555;  // Your OpenVPN management port
+const OPENVPN_PORT = 5555;
 
-// Function to send command to OpenVPN management interface
+// Set EJS as the template engine
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
 const sendCommandToOpenVPN = (command) => {
     return new Promise((resolve, reject) => {
         const client = new net.Socket();
@@ -18,7 +22,7 @@ const sendCommandToOpenVPN = (command) => {
 
         client.on('data', (data) => {
             response += data.toString();
-            if (response.includes('END')) { // End of OpenVPN response
+            if (response.includes('END')) { 
                 client.destroy();
                 resolve(response);
             }
@@ -27,38 +31,6 @@ const sendCommandToOpenVPN = (command) => {
         client.on('error', (err) => reject(err));
     });
 };
-
-// API Endpoint to get OpenVPN status
-app.get('/api/openvpn/status', async (req, res) => {
-    try {
-        const rawData = await sendCommandToOpenVPN('status 3');
-        const parsedData = parseOpenVPNStatus(rawData);
-        res.json(parsedData);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-
-// API Endpoint to get connected clients
-app.get('/api/openvpn/clients', async (req, res) => {
-    try {
-        const data = await sendCommandToOpenVPN('status 3');
-        const clients = data.split('\n').filter(line => line.startsWith('CLIENT_LIST')).map(line => {
-            const parts = line.split(',');
-            return {
-                common_name: parts[1],
-                real_address: parts[2],
-                bytes_received: parts[3],
-                bytes_sent: parts[4],
-                connected_since: parts[6]
-            };
-        });
-        res.json(clients);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
 
 const parseOpenVPNStatus = (data) => {
     const lines = data.split('\n');
@@ -73,7 +45,7 @@ const parseOpenVPNStatus = (data) => {
         const parts = line.split('\t');
 
         if (line.startsWith("TIME")) {
-            result.time = parts[1];  // Extract timestamp
+            result.time = parts[1];  
         } 
         else if (line.startsWith("CLIENT_LIST")) {
             result.clients.push({
@@ -108,8 +80,38 @@ const parseOpenVPNStatus = (data) => {
     return result;
 };
 
+// Render OpenVPN status page
+app.get('/openvpn/status', async (req, res) => {
+    try {
+        const rawData = await sendCommandToOpenVPN('status 3');
+        const parsedData = parseOpenVPNStatus(rawData);
+        res.render('status', { status: parsedData });
+    } catch (error) {
+        res.status(500).render('error', { message: error.message });
+    }
+});
 
-// Start Express server
+// Render OpenVPN clients page
+app.get('/openvpn/clients', async (req, res) => {
+    try {
+        const data = await sendCommandToOpenVPN('status 3');
+        const clients = data.split('\n').filter(line => line.startsWith('CLIENT_LIST')).map(line => {
+            const parts = line.split(',');
+            return {
+                common_name: parts[1],
+                real_address: parts[2],
+                bytes_received: parts[3],
+                bytes_sent: parts[4],
+                connected_since: parts[6]
+            };
+        });
+        res.render('clients', { clients });
+    } catch (error) {
+        res.status(500).render('error', { message: error.message });
+    }
+});
+
+// Start server
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
