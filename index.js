@@ -4,6 +4,8 @@ const path = require("path");
 const http = require("http");
 const { Pool } = require("pg");
 require("dotenv").config();
+const fs = require("fs");
+const logFilePath = "/var/log/openvpn-status.log";
 const { connectSocket } = require("./socket");
 
 const app = express();
@@ -79,6 +81,45 @@ const sendCommandToOpenVPN = (command) => {
     client.on("error", (err) => reject(err));
   });
 };
+
+app.post(
+  "/openvpn/execute-command",
+  express.urlencoded({ extended: true }),
+  async (req, res) => {
+    try {
+      const command = req.body.command;
+      if (!command) {
+        return res.render("execute_command", {
+          response: null,
+          error: "Command cannot be empty!",
+        });
+      }
+
+      const response = await sendCommandToOpenVPN(command);
+      await storeLog(`Command: ${command}\nResponse: ${response}`);
+
+      res.render("execute_command", { response, error: null });
+    } catch (error) {
+      res.render("execute_command", { response: null, error: error.message });
+    }
+  }
+);
+
+app.get("/openvpn/execute-command", (req, res) => {
+  res.render("execute_command", { response: null, error: null });
+});
+
+app.get("/openvpn/log-file", (req, res) => {
+  fs.readFile(logFilePath, "utf8", (err, data) => {
+    if (err) {
+      return res.render("log_file", {
+        logContent: null,
+        error: `Error reading log file: ${err.message}`,
+      });
+    }
+    res.render("log_file", { logContent: data, error: null });
+  });
+});
 
 // Store OpenVPN logs in PostgreSQL
 const storeLog = async (logData) => {
