@@ -3,6 +3,7 @@ const net = require("net");
 const path = require("path");
 const http = require("http");
 const { Pool } = require("pg");
+require("dotenv").config()
 const { connectSocket } = require("./socket");
 
 const app = express();
