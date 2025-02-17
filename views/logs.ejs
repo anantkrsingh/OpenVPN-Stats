@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OpenVPN Logs</title>
+</head>
+<body>
+    <h1>OpenVPN Logs</h1>
+    <ul>
+        <% logs.forEach(log => { %>
+            <li>
+                <strong><%= log.timestamp %></strong>
+                <pre><%= log.log_data %></pre>
+            </li>
+        <% }) %>
+    </ul>
+</body>
+</html>

@@ -2,8 +2,11 @@
   "name": "server",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "commonjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "keywords": [],
   "author": "",
@@ -14,7 +17,11 @@
     "ejs": "^3.1.10",
     "express": "^4.21.2",
     "net": "^1.0.2",
+    "pg": "^8.13.3",
     "socket.io": "^4.8.1",
     "tail": "^2.2.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
   }
 }
